@@ -18,10 +18,19 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.web.servlet.HandlerExceptionResolver;
 
 import java.io.IOException;
+import java.util.List;
 
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private static final Logger logger = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
+
+    private static final List<String> PUBLIC_PATHS = List.of(
+            "/auth/",
+            "/auto-login",
+            "/uploads/",
+            "/swagger-ui",
+            "/v3/api-docs"
+    );
 
     private final HandlerExceptionResolver handlerExceptionResolver;
     private final JwtService jwtService;
@@ -35,6 +44,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         this.jwtService = jwtService;
         this.userDetailsService = userDetailsService;
         this.handlerExceptionResolver = handlerExceptionResolver;
+    }
+
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        String path = request.getServletPath();
+        return PUBLIC_PATHS.stream().anyMatch(path::startsWith);
     }
 
     @Override
