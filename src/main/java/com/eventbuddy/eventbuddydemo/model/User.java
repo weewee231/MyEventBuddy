@@ -89,8 +89,6 @@ public class User implements UserDetails {
         this.enabled = false;
     }
 
-    // ===== Spring Security UserDetails =====
-    
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
         return List.of(new SimpleGrantedAuthority("ROLE_" + role.name()));
@@ -98,7 +96,7 @@ public class User implements UserDetails {
 
     @Override
     public String getUsername() {
-        return email; // Используем email как логин
+        return email;
     }
 
     @Override
@@ -109,8 +107,6 @@ public class User implements UserDetails {
 
     @Override
     public boolean isCredentialsNonExpired() { return true; }
-    
-    // getPassword() и isEnabled() генерируются @Getter
 
     public boolean isRefreshTokenValid() {
         return refreshToken != null &&

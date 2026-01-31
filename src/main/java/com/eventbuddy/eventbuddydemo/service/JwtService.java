@@ -5,8 +5,7 @@ import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
@@ -17,9 +16,9 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Function;
 
+@Slf4j
 @Service
 public class JwtService {
-    private static final Logger logger = LoggerFactory.getLogger(JwtService.class);
 
     @Value("${security.jwt.secret-key}")
     private String secretKey;
@@ -33,10 +32,10 @@ public class JwtService {
     public String extractUsername(String token) {
         try {
             String username = extractClaim(token, Claims::getSubject);
-            logger.debug("Extracted username from token: {}", username);
+            log.debug("Extracted username from token: {}", username);
             return username;
         } catch (Exception e) {
-            logger.error("Failed to extract username from token", e);
+            log.error("Failed to extract username from token", e);
             throw e;
         }
     }
@@ -52,13 +51,13 @@ public class JwtService {
 
     public String generateToken(Map<String, Object> extraClaims, UserDetails userDetails) {
         String token = buildToken(extraClaims, userDetails, jwtExpiration);
-        logger.debug("Generated access token for user: {}", userDetails.getUsername());
+        log.debug("Generated access token for user: {}", userDetails.getUsername());
         return token;
     }
 
     public String generateRefreshToken(UserDetails userDetails) {
         String refreshToken = buildToken(new HashMap<>(), userDetails, refreshExpiration);
-        logger.debug("Generated refresh token for user: {}", userDetails.getUsername());
+        log.debug("Generated refresh token for user: {}", userDetails.getUsername());
         return refreshToken;
     }
 
@@ -90,9 +89,9 @@ public class JwtService {
         boolean isValid = (username.equals(userDetails.getUsername())) && !isTokenExpired(token);
 
         if (!isValid) {
-            logger.warn("Token validation failed for user: {}", username);
+            log.warn("Token validation failed for user: {}", username);
         } else {
-            logger.debug("Token validation successful for user: {}", username);
+            log.debug("Token validation successful for user: {}", username);
         }
 
         return isValid;
@@ -101,7 +100,7 @@ public class JwtService {
     private boolean isTokenExpired(String token) {
         boolean expired = extractExpiration(token).before(new Date());
         if (expired) {
-            logger.debug("Token expired");
+            log.debug("Token expired");
         }
         return expired;
     }
@@ -119,7 +118,7 @@ public class JwtService {
                     .parseClaimsJws(token)
                     .getBody();
         } catch (Exception e) {
-            logger.error("Failed to extract claims from token", e);
+            log.error("Failed to extract claims from token", e);
             throw e;
         }
     }
