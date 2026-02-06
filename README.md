@@ -66,7 +66,7 @@ docker-compose up -d postgres redis
 ./mvnw spring-boot:run
 ```
 
-Приложение будет доступно на `http://localhost:8080`
+Приложение будет доступно на `https://localhost:8080`
 
 ## Переменные окружения
 
@@ -117,6 +117,10 @@ docker-compose up -d postgres redis
 | POST | `/projects` | Создать проект |
 | PUT | `/projects/{id}` | Обновить проект |
 | DELETE | `/projects/{id}` | Удалить проект |
+| GET | `/projects/{projectId}/members` | Получить участников проекта |
+| POST | `/projects/{projectId}/members` | Пригласить участника |
+| PATCH | `/projects/{projectId}/members` | Обновить участника |
+| DELETE | `/projects/{projectId}/members` | Удалить участника |
 
 ### Параметры поиска `/projects/search`
 
@@ -131,7 +135,7 @@ docker-compose up -d postgres redis
 
 ## Документация API
 
-Swagger UI доступен по адресу: `http://localhost:8080/swagger-ui.html`
+Swagger UI доступен по адресу: `https://localhost:8080/swagger-ui.html`
 
 ## Структура проекта
 
