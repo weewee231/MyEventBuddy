@@ -1,10 +1,11 @@
 package com.eventbuddy.eventbuddydemo.controller;
 
-import com.eventbuddy.eventbuddydemo.dto.*;
-import com.eventbuddy.eventbuddydemo.dto.AuthResponse;
-import com.eventbuddy.eventbuddydemo.dto.VerifyResponse;
+import com.eventbuddy.eventbuddydemo.dto.auth.*;
+import com.eventbuddy.eventbuddydemo.dto.user.UserDto;
 import com.eventbuddy.eventbuddydemo.service.AuthenticationService;
 import com.eventbuddy.eventbuddydemo.service.JwtService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,11 +20,13 @@ import java.util.Map;
 @RestController
 @RequestMapping("/auth")
 @RequiredArgsConstructor
+@Tag(name = "Аутентификация", description = "Регистрация, вход, подтверждение email и восстановление доступа")
 public class AuthenticationController {
     private final JwtService jwtService;
     private final AuthenticationService authenticationService;
 
     @PostMapping("/signup")
+    @Operation(summary = "Регистрация пользователя", description = "Создаёт пользователя и отправляет код подтверждения на email.")
     public ResponseEntity<UserDto> register(@Valid @RequestBody RegisterUserDto registerUserDto) {
         log.info("POST /auth/signup - registration attempt for: {}", registerUserDto.getEmail());
         UserDto registeredUser = authenticationService.signup(registerUserDto);
@@ -31,6 +34,7 @@ public class AuthenticationController {
     }
 
     @PostMapping("/login")
+    @Operation(summary = "Вход", description = "Проверяет логин/пароль, возвращает access token и устанавливает refresh token в cookie.")
     public ResponseEntity<AuthResponse> authenticate(@Valid @RequestBody LoginUserDto loginUserDto) {
         log.info("POST /auth/login - login attempt for: {}", loginUserDto.getEmail());
         
@@ -51,6 +55,7 @@ public class AuthenticationController {
     }
 
     @PostMapping("/verify")
+    @Operation(summary = "Подтверждение email", description = "Проверяет код подтверждения и активирует аккаунт.")
     public ResponseEntity<VerifyResponse> verifyUser(@Valid @RequestBody VerifyUserDto verifyUserDto) {
         log.info("POST /auth/verify - verification attempt for: {}", verifyUserDto.getEmail());
         VerifyResponse verifyResponse = authenticationService.verifyUser(verifyUserDto);
@@ -58,6 +63,7 @@ public class AuthenticationController {
     }
 
     @RequestMapping(value = "/auto-login", method = {RequestMethod.GET, RequestMethod.POST})
+    @Operation(summary = "Автологин по коду", description = "Выполняет вход по коду из письма и выдаёт токены.")
     public ResponseEntity<AuthResponse> autoLogin(@RequestParam String token) {
         log.info("POST /auth/auto-login - auto-login attempt");
         
@@ -78,6 +84,7 @@ public class AuthenticationController {
     }
 
     @PostMapping("/refresh")
+    @Operation(summary = "Обновление access token", description = "Выдаёт новый access token по refresh token из cookie.")
     public ResponseEntity<AuthResponse> refreshToken(@CookieValue(name = "refreshToken", required = false) String refreshToken) {
         log.info("POST /auth/refresh - refresh token attempt");
         AuthResponse authResponse = authenticationService.refreshToken(refreshToken);
@@ -85,6 +92,7 @@ public class AuthenticationController {
     }
 
     @PostMapping("/resend")
+    @Operation(summary = "Повторная отправка кода подтверждения", description = "Отправляет новый код подтверждения на email.")
     public ResponseEntity<Map<String, String>> resendVerificationCode(@RequestParam String email) {
         log.info("POST /auth/resend - resend verification code for: {}", email);
         authenticationService.resendVerificationCode(email);
@@ -92,6 +100,7 @@ public class AuthenticationController {
     }
 
     @PostMapping("/logout")
+    @Operation(summary = "Выход", description = "Инвалидирует refresh token и очищает cookie.")
     public ResponseEntity<Map<String, String>> logout(@CookieValue(name = "refreshToken", required = false) String refreshToken) {
         log.info("POST /auth/logout - logout attempt");
         
@@ -122,6 +131,7 @@ public class AuthenticationController {
     }
 
     @PostMapping("/recovery")
+    @Operation(summary = "Запрос восстановления пароля", description = "Отправляет код восстановления на email.")
     public ResponseEntity<Map<String, String>> requestPasswordRecovery(@Valid @RequestBody RecoveryRequestDto recoveryRequestDto) {
         log.info("POST /auth/recovery - password recovery request for: {}", recoveryRequestDto.getEmail());
         authenticationService.requestPasswordRecovery(recoveryRequestDto.getEmail());
@@ -129,6 +139,7 @@ public class AuthenticationController {
     }
 
     @PostMapping("/recovery/resend")
+    @Operation(summary = "Повторная отправка кода восстановления", description = "Отправляет новый код восстановления на email.")
     public ResponseEntity<Map<String, String>> resendRecoveryCode(@Valid @RequestBody RecoveryRequestDto recoveryRequestDto) {
         log.info("POST /auth/recovery/resend - resend recovery code for: {}", recoveryRequestDto.getEmail());
         authenticationService.resendRecoveryCode(recoveryRequestDto.getEmail());
@@ -136,6 +147,7 @@ public class AuthenticationController {
     }
 
     @PostMapping("/reset-password")
+    @Operation(summary = "Сброс пароля", description = "Проверяет код восстановления и меняет пароль.")
     public ResponseEntity<Map<String, String>> resetPassword(@Valid @RequestBody PasswordResetDto passwordResetDto) {
         log.info("POST /auth/reset-password - password reset attempt for: {}", passwordResetDto.getEmail());
         authenticationService.resetPassword(passwordResetDto);

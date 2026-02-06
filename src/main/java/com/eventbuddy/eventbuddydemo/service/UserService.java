@@ -1,7 +1,7 @@
 package com.eventbuddy.eventbuddydemo.service;
 
-import com.eventbuddy.eventbuddydemo.dto.UpdateUserDto;
-import com.eventbuddy.eventbuddydemo.dto.UserDto;
+import com.eventbuddy.eventbuddydemo.dto.user.UpdateUserDto;
+import com.eventbuddy.eventbuddydemo.dto.user.UserDto;
 import com.eventbuddy.eventbuddydemo.exception.AuthException;
 import com.eventbuddy.eventbuddydemo.model.User;
 import com.eventbuddy.eventbuddydemo.repository.UserRepository;
