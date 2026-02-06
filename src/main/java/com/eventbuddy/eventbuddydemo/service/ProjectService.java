@@ -1,14 +1,14 @@
 package com.eventbuddy.eventbuddydemo.service;
 
-import com.eventbuddy.eventbuddydemo.dto.CreateProjectDto;
-import com.eventbuddy.eventbuddydemo.dto.EditProjectDto;
-import com.eventbuddy.eventbuddydemo.dto.ProjectDto;
-import com.eventbuddy.eventbuddydemo.dto.ProjectFilterDto;
+import com.eventbuddy.eventbuddydemo.dto.project.CreateProjectDto;
+import com.eventbuddy.eventbuddydemo.dto.project.EditProjectDto;
+import com.eventbuddy.eventbuddydemo.dto.project.ProjectDto;
+import com.eventbuddy.eventbuddydemo.dto.project.ProjectFilterDto;
 import com.eventbuddy.eventbuddydemo.exception.AuthException;
 import com.eventbuddy.eventbuddydemo.model.Project;
 import com.eventbuddy.eventbuddydemo.model.User;
 import com.eventbuddy.eventbuddydemo.repository.ProjectRepository;
-import com.eventbuddy.eventbuddydemo.repository.ProjectSpecification;
+import com.eventbuddy.eventbuddydemo.specification.ProjectSpecification;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Sort;

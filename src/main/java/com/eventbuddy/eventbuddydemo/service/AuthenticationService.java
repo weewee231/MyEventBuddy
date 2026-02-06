@@ -1,12 +1,11 @@
 package com.eventbuddy.eventbuddydemo.service;
 
-import com.eventbuddy.eventbuddydemo.dto.*;
+import com.eventbuddy.eventbuddydemo.dto.auth.*;
+import com.eventbuddy.eventbuddydemo.dto.user.UserDto;
 import com.eventbuddy.eventbuddydemo.exception.AuthException;
 import com.eventbuddy.eventbuddydemo.exception.UserNotFoundException;
 import com.eventbuddy.eventbuddydemo.model.User;
 import com.eventbuddy.eventbuddydemo.repository.UserRepository;
-import com.eventbuddy.eventbuddydemo.dto.AuthResponse;
-import com.eventbuddy.eventbuddydemo.dto.VerifyResponse;
 import jakarta.mail.MessagingException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
