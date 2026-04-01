@@ -31,7 +31,7 @@ public class AuthenticationService {
 
     @Transactional
     public UserDto signup(RegisterUserDto input) {
-        log.info("Attempting to sign up user with email: {}", input.getEmail());
+        log.info("Attempting to sign up user with email: {}", input.getEmail()); // todo use aspects
 
         if (userRepository.findByEmail(input.getEmail()).isPresent()) {
             log.warn("Signup failed - user already exists with email: {}", input.getEmail());
@@ -99,62 +99,18 @@ public class AuthenticationService {
     public VerifyResponse verifyUser(VerifyUserDto input) {
         log.info("Verification attempt for user: {}", input.getEmail());
 
-        Optional<User> optionalUser = userRepository.findByEmail(input.getEmail());
-        if (optionalUser.isPresent()) {
-            User user = optionalUser.get();
+        User user = findUserByEmailOrThrow(input.getEmail(), "Verification failed - user not found: {}");
 
-            boolean isEmailVerification = user.getVerificationCode() != null &&
-                    user.getVerificationCode().equals(input.getCode());
-
-            boolean isPasswordRecovery = user.getResetPasswordCode() != null &&
-                    user.getResetPasswordCode().equals(input.getCode());
-
-            if (isEmailVerification) {
-                log.debug("Email verification attempt for: {}", input.getEmail());
-
-                if (user.getVerificationCodeExpiresAt() == null ||
-                        user.getVerificationCodeExpiresAt().isBefore(LocalDateTime.now())) {
-                    log.warn("Email verification failed - code expired for: {}", input.getEmail());
-                    throw new AuthException("Срок действия кода подтверждения истек", "code");
-                }
-
-                user.setEnabled(true);
-                user.setVerificationCode(null);
-                user.setVerificationCodeExpiresAt(null);
-
-                String autoLoginCode = generateAutoLoginCode();
-                user.setAutoLoginCode(autoLoginCode);
-                user.setAutoLoginCodeExpiresAt(LocalDateTime.now().plusMinutes(5));
-                userRepository.save(user);
-
-                log.info("Email successfully verified for user: {}", input.getEmail());
-                return new VerifyResponse(autoLoginCode);
-
-            } else if (isPasswordRecovery) {
-                log.debug("Password recovery verification attempt for: {}", input.getEmail());
-
-                if (user.getResetPasswordCodeExpiresAt() == null ||
-                        user.getResetPasswordCodeExpiresAt().isBefore(LocalDateTime.now())) {
-                    log.warn("Password recovery verification failed - code expired for: {}", input.getEmail());
-                    throw new AuthException("Срок действия кода восстановления истек", "code");
-                }
-
-                String recoveryToken = generateRecoveryToken();
-                user.setRecoveryToken(recoveryToken);
-                user.setRecoveryTokenExpiresAt(LocalDateTime.now().plusMinutes(10));
-                userRepository.save(user);
-
-                log.info("Password recovery code verified for user: {}", input.getEmail());
-                return new VerifyResponse(recoveryToken);
-
-            } else {
-                log.warn("Verification failed - invalid code for: {}", input.getEmail());
-                throw new AuthException("Неверный код подтверждения", "code");
-            }
-        } else {
-            log.warn("Verification failed - user not found: {}", input.getEmail());
-            throw new UserNotFoundException("Пользователь не найден");
+        if (matchesCode(user.getVerificationCode(), input.getCode())) {
+            return verifyEmail(user, input.getEmail());
         }
+
+        if (matchesCode(user.getResetPasswordCode(), input.getCode())) {
+            return verifyPasswordRecovery(user, input.getEmail());
+        }
+
+        log.warn("Verification failed - invalid code for: {}", input.getEmail());
+        throw new AuthException("Неверный код подтверждения", "code");
     }
 
     public AuthResponse processAutoLogin(String token) {
@@ -164,56 +120,40 @@ public class AuthenticationService {
         if (autoLoginUser.isPresent()) {
             User user = autoLoginUser.get();
             log.debug("Auto-login token found for user: {}", user.getEmail());
+            validateNotExpired(user.getAutoLoginCodeExpiresAt(),
+                    "Auto-login failed - token expired for: {}",
+                    user.getEmail(),
+                    "Срок действия кода автологина истек",
+                    "token");
 
-            if (user.getAutoLoginCodeExpiresAt() == null ||
-                    user.getAutoLoginCodeExpiresAt().isBefore(LocalDateTime.now())) {
-                log.warn("Auto-login failed - token expired for: {}", user.getEmail());
-                throw new AuthException("Срок действия кода автологина истек", "token");
-            }
-
-            String accessToken = jwtService.generateToken(user);
-            String refreshToken = jwtService.generateRefreshToken(user);
-
-            user.setRefreshToken(refreshToken);
-            user.setRefreshTokenExpiresAt(LocalDateTime.now().plusSeconds(
-                    jwtService.getRefreshExpirationTime() / 1000));
+            AuthResponse response = createAuthenticatedResponse(user);
             user.setAutoLoginCode(null);
             user.setAutoLoginCodeExpiresAt(null);
-
             userRepository.save(user);
 
             log.info("Successful auto-login for user: {}", user.getEmail());
-            return new AuthResponse(user, accessToken);
+            return response;
         }
 
         Optional<User> recoveryUser = userRepository.findByRecoveryToken(token);
         if (recoveryUser.isPresent()) {
             User user = recoveryUser.get();
             log.debug("Recovery token found for user: {}", user.getEmail());
+            validateNotExpired(user.getRecoveryTokenExpiresAt(),
+                    "Recovery auto-login failed - token expired for: {}",
+                    user.getEmail(),
+                    "Срок действия токена восстановления истек",
+                    "token");
 
-            if (user.getRecoveryTokenExpiresAt() == null ||
-                    user.getRecoveryTokenExpiresAt().isBefore(LocalDateTime.now())) {
-                log.warn("Recovery auto-login failed - token expired for: {}", user.getEmail());
-                throw new AuthException("Срок действия токена восстановления истек", "token");
-            }
-
-            String accessToken = jwtService.generateToken(user);
-            String refreshToken = jwtService.generateRefreshToken(user);
-
-            user.setRefreshToken(refreshToken);
-            user.setRefreshTokenExpiresAt(LocalDateTime.now().plusSeconds(
-                    jwtService.getRefreshExpirationTime() / 1000));
-
+            AuthResponse response = createAuthenticatedResponse(user);
             user.setRecoveryToken(null);
             user.setRecoveryTokenExpiresAt(null);
-
             user.setResetPasswordCode(null);
             user.setResetPasswordCodeExpiresAt(null);
-
             userRepository.save(user);
 
             log.info("Successful recovery auto-login for user: {}", user.getEmail());
-            return new AuthResponse(user, accessToken);
+            return response;
         }
 
         log.warn("Auto-login failed - invalid token");
@@ -283,139 +223,189 @@ public class AuthenticationService {
     public void resendVerificationCode(String email) {
         log.info("Resending verification code for: {}", email);
 
-        Optional<User> optionalUser = userRepository.findByEmail(email);
-        if (optionalUser.isPresent()) {
-            User user = optionalUser.get();
-            if (user.isEnabled()) {
-                log.warn("Resend verification failed - account already enabled: {}", email);
-                throw new AuthException("Аккаунт уже подтвержден", "email");
-            }
-            user.setVerificationCode(generateVerificationCode());
-            user.setVerificationCodeExpiresAt(LocalDateTime.now().plusHours(1));
-            sendVerificationEmail(user);
-            userRepository.save(user);
-            log.info("Verification code resent for: {}", email);
-        } else {
-            log.warn("Resend verification failed - user not found: {}", email);
-            throw new UserNotFoundException("Пользователь не найден");
+        User user = findUserByEmailOrThrow(email, "Resend verification failed - user not found: {}");
+        if (user.isEnabled()) {
+            log.warn("Resend verification failed - account already enabled: {}", email);
+            throw new AuthException("Аккаунт уже подтвержден", "email");
         }
+
+        user.setVerificationCode(generateVerificationCode());
+        user.setVerificationCodeExpiresAt(LocalDateTime.now().plusHours(1));
+        sendVerificationEmail(user);
+        userRepository.save(user);
+        log.info("Verification code resent for: {}", email);
     }
 
     public void logout(String email) {
         log.info("Logout request for user: {}", email);
 
         Optional<User> optionalUser = userRepository.findByEmail(email);
-        if (optionalUser.isPresent()) {
-            User user = optionalUser.get();
-            user.invalidateRefreshToken();
-            userRepository.save(user);
-            log.info("Successful logout for user: {}", email);
-        } else {
+        if (optionalUser.isEmpty()) {
             log.warn("Logout failed - user not found: {}", email);
+            return;
         }
+
+        User user = optionalUser.get();
+        user.invalidateRefreshToken();
+        userRepository.save(user);
+        log.info("Successful logout for user: {}", email);
     }
 
     public void requestPasswordRecovery(String email) {
         log.info("Password recovery request for: {}", email);
 
-        Optional<User> optionalUser = userRepository.findByEmail(email);
-        if (optionalUser.isPresent()) {
-            User user = optionalUser.get();
-
-            if (!user.isEnabled()) {
-                log.warn("Password recovery failed - account not enabled: {}", email);
-                throw new AuthException("Аккаунт не подтвержден. Сначала подтвердите email.", "email");
-            }
-
-            String recoveryCode = generateRecoveryCode();
-            user.setResetPasswordCode(recoveryCode);
-            user.setResetPasswordCodeExpiresAt(LocalDateTime.now().plusMinutes(15));
-
-            userRepository.save(user);
-            sendRecoveryEmail(user, recoveryCode);
-            log.info("Password recovery code sent to: {}", email);
-        } else {
-            log.warn("Password recovery failed - user not found: {}", email);
-            throw new UserNotFoundException("Пользователь с таким email не найден");
+        User user = findUserByEmailOrThrow(email, "Password recovery failed - user not found: {}",
+                "Пользователь с таким email не найден");
+        if (!user.isEnabled()) {
+            log.warn("Password recovery failed - account not enabled: {}", email);
+            throw new AuthException("Аккаунт не подтвержден. Сначала подтвердите email.", "email");
         }
+
+        String recoveryCode = generateRecoveryCode();
+        user.setResetPasswordCode(recoveryCode);
+        user.setResetPasswordCodeExpiresAt(LocalDateTime.now().plusMinutes(15));
+
+        userRepository.save(user);
+        sendRecoveryEmail(user, recoveryCode);
+        log.info("Password recovery code sent to: {}", email);
     }
 
     public void resetPassword(PasswordResetDto passwordResetDto) {
         log.info("Password reset attempt for: {}", passwordResetDto.getEmail());
 
-        Optional<User> optionalUser = userRepository.findByEmail(passwordResetDto.getEmail());
-        if (optionalUser.isPresent()) {
-            User user = optionalUser.get();
+        User user = findUserByEmailOrThrow(passwordResetDto.getEmail(),
+                "Password reset failed - user not found: {}");
 
-            if (!user.isResetPasswordCodeValid()) {
-                log.warn("Password reset failed - code expired for: {}", passwordResetDto.getEmail());
-                throw new AuthException("Срок действия кода восстановления истек", "code");
-            }
-
-            if (!user.getResetPasswordCode().equals(passwordResetDto.getCode())) {
-                log.warn("Password reset failed - invalid code for: {}", passwordResetDto.getEmail());
-                throw new AuthException("Неверный код восстановления", "code");
-            }
-
-            user.setPassword(passwordEncoder.encode(passwordResetDto.getNewPassword()));
-            user.invalidateResetPasswordCode();
-
-            userRepository.save(user);
-            sendPasswordChangedEmail(user);
-            log.info("Password successfully reset for: {}", passwordResetDto.getEmail());
-        } else {
-            log.warn("Password reset failed - user not found: {}", passwordResetDto.getEmail());
-            throw new UserNotFoundException("Пользователь не найден");
+        if (!user.isResetPasswordCodeValid()) {
+            log.warn("Password reset failed - code expired for: {}", passwordResetDto.getEmail());
+            throw new AuthException("Срок действия кода восстановления истек", "code");
         }
+
+        if (!matchesCode(user.getResetPasswordCode(), passwordResetDto.getCode())) {
+            log.warn("Password reset failed - invalid code for: {}", passwordResetDto.getEmail());
+            throw new AuthException("Неверный код восстановления", "code");
+        }
+
+        user.setPassword(passwordEncoder.encode(passwordResetDto.getNewPassword()));
+        user.invalidateResetPasswordCode();
+
+        userRepository.save(user);
+        sendPasswordChangedEmail(user);
+        log.info("Password successfully reset for: {}", passwordResetDto.getEmail());
     }
 
     public void resendRecoveryCode(String email) {
         log.info("Resending recovery code for: {}", email);
 
-        Optional<User> optionalUser = userRepository.findByEmail(email);
-        if (optionalUser.isPresent()) {
-            User user = optionalUser.get();
+        User user = findUserByEmailOrThrow(email, "Resend recovery code failed - user not found: {}",
+                "Пользователь с таким email не найден");
 
-            if (!user.isEnabled()) {
-                log.warn("Resend recovery code failed - account not enabled: {}", email);
-                throw new AuthException("Аккаунт не подтвержден. Сначала подтвердите email.", "email");
-            }
-
-            String recoveryCode = generateRecoveryCode();
-            user.setResetPasswordCode(recoveryCode);
-            user.setResetPasswordCodeExpiresAt(LocalDateTime.now().plusMinutes(15));
-
-            userRepository.save(user);
-            sendRecoveryEmail(user, recoveryCode);
-            log.info("Recovery code resent to: {}", email);
-        } else {
-            log.warn("Resend recovery code failed - user not found: {}", email);
-            throw new UserNotFoundException("Пользователь с таким email не найден");
+        if (!user.isEnabled()) {
+            log.warn("Resend recovery code failed - account not enabled: {}", email);
+            throw new AuthException("Аккаунт не подтвержден. Сначала подтвердите email.", "email");
         }
+
+        String recoveryCode = generateRecoveryCode();
+        user.setResetPasswordCode(recoveryCode);
+        user.setResetPasswordCodeExpiresAt(LocalDateTime.now().plusMinutes(15));
+
+        userRepository.save(user);
+        sendRecoveryEmail(user, recoveryCode);
+        log.info("Recovery code resent to: {}", email);
     }
 
     private String generateAutoLoginCode() {
-        Random random = new Random();
-        int code = random.nextInt(900000) + 100000;
-        return String.valueOf(code);
+        return generateSixDigitCode();
     }
 
     private String generateRecoveryToken() {
-        Random random = new Random();
-        int code = random.nextInt(900000) + 100000;
-        return String.valueOf(code);
+        return generateSixDigitCode();
     }
 
     private String generateVerificationCode() {
+        return generateSixDigitCode();
+    }
+
+    private String generateRecoveryCode() {
+        return generateSixDigitCode();
+    }
+
+    private String generateSixDigitCode() {
         Random random = new Random();
         int code = random.nextInt(900000) + 100000;
         return String.valueOf(code);
     }
 
-    private String generateRecoveryCode() {
-        Random random = new Random();
-        int code = random.nextInt(900000) + 100000;
-        return String.valueOf(code);
+    private VerifyResponse verifyEmail(User user, String email) {
+        log.debug("Email verification attempt for: {}", email);
+        validateNotExpired(user.getVerificationCodeExpiresAt(),
+                "Email verification failed - code expired for: {}",
+                email,
+                "Срок действия кода подтверждения истек",
+                "code");
+
+        user.setEnabled(true);
+        user.setVerificationCode(null);
+        user.setVerificationCodeExpiresAt(null);
+
+        String autoLoginCode = generateAutoLoginCode();
+        user.setAutoLoginCode(autoLoginCode);
+        user.setAutoLoginCodeExpiresAt(LocalDateTime.now().plusMinutes(5));
+        userRepository.save(user);
+
+        log.info("Email successfully verified for user: {}", email);
+        return new VerifyResponse(autoLoginCode);
+    }
+
+    private VerifyResponse verifyPasswordRecovery(User user, String email) {
+        log.debug("Password recovery verification attempt for: {}", email);
+        validateNotExpired(user.getResetPasswordCodeExpiresAt(),
+                "Password recovery verification failed - code expired for: {}",
+                email,
+                "Срок действия кода восстановления истек",
+                "code");
+
+        String recoveryToken = generateRecoveryToken();
+        user.setRecoveryToken(recoveryToken);
+        user.setRecoveryTokenExpiresAt(LocalDateTime.now().plusMinutes(10));
+        userRepository.save(user);
+
+        log.info("Password recovery code verified for user: {}", email);
+        return new VerifyResponse(recoveryToken);
+    }
+
+    private User findUserByEmailOrThrow(String email, String logMessage) {
+        return findUserByEmailOrThrow(email, logMessage, "Пользователь не найден");
+    }
+
+    private User findUserByEmailOrThrow(String email, String logMessage, String errorMessage) {
+        return userRepository.findByEmail(email)
+                .orElseThrow(() -> {
+                    log.warn(logMessage, email);
+                    return new UserNotFoundException(errorMessage);
+                });
+    }
+
+    private boolean matchesCode(String expectedCode, String actualCode) {
+        return expectedCode != null && expectedCode.equals(actualCode);
+    }
+
+    private void validateNotExpired(LocalDateTime expiresAt, String logMessage, String logValue,
+                                    String errorMessage, String field) {
+        if (expiresAt != null && expiresAt.isAfter(LocalDateTime.now())) {
+            return;
+        }
+
+        log.warn(logMessage, logValue);
+        throw new AuthException(errorMessage, field);
+    }
+
+    private AuthResponse createAuthenticatedResponse(User user) {
+        String accessToken = jwtService.generateToken(user);
+        String refreshToken = jwtService.generateRefreshToken(user);
+        user.setRefreshToken(refreshToken);
+        user.setRefreshTokenExpiresAt(LocalDateTime.now().plusSeconds(jwtService.getRefreshExpirationTime() / 1000));
+        return new AuthResponse(user, accessToken);
     }
 
     private void sendVerificationEmail(User user) {
